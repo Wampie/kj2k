@@ -29,11 +29,12 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.j2k.visitors.ClassVisitor;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintStream;
+import java.io.*;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.Charset;
 
 /**
  * @author ignatov
@@ -103,8 +104,7 @@ public class JavaToKotlinTranslator {
             if (rtJar == null) {
                 throw new SetupJavaCoreEnvironmentException("JAVA_HOME environment variable needs to be defined");
             }
-        }
-        else {
+        } else {
             rtJar = findRtJar(javaHome);
         }
 
@@ -172,8 +172,7 @@ public class JavaToKotlinTranslator {
                     }
                 }, ", "));
             }
-        }
-        else if (failOnError) {
+        } else if (failOnError) {
             throw new SetupJavaCoreEnvironmentException("System class loader is not an URLClassLoader: " + systemClassLoader);
         }
         return null;
@@ -206,25 +205,83 @@ public class JavaToKotlinTranslator {
         return "";
     }
 
+    private static String readFile(File file) throws IOException {
+        FileInputStream stream = new FileInputStream(file);
+        try {
+            FileChannel fc = stream.getChannel();
+            MappedByteBuffer bb = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size());
+            return Charset.defaultCharset().decode(bb).toString();
+        } finally {
+            stream.close();
+        }
+    }
+
+    private static void convertFileToKotlin(File file) {
+        final PrintStream out = System.out;
+        String kotlinCode = "";
+        try {
+            kotlinCode = generateKotlinCode(readFile(file));
+        } catch (Exception e) {
+            out.println("EXCEPTION: " + e.getMessage());
+        }
+        if (kotlinCode.isEmpty()) {
+            out.println("EXCEPTION: generated code is empty.");
+        } else {
+            try {
+                File newFile = new File(file.getAbsolutePath().replace(".java", ".kt"));
+                BufferedWriter outBuffer = new BufferedWriter(new FileWriter(newFile));
+                outBuffer.write(kotlinCode);
+                outBuffer.close();
+            } catch (IOException e) {
+                System.out.println("Exception ");
+            }
+        }
+    }
+
+    public static void convertDirectory(File dir) {
+        if (!dir.isDirectory()) {
+            System.out.println("EXCEPTION: Given file is not a directory.");
+        }
+        File[] files = dir.listFiles();
+        for (File f : files) {
+            if (f.isDirectory()) {
+                convertDirectory(f);
+            } else {
+                convertFileToKotlin(f);
+            }
+        }
+    }
+
+
     public static void main(@NotNull String[] args) throws IOException {
         //noinspection UseOfSystemOutOrSystemErr
         final PrintStream out = System.out;
-        if (args.length == 1) {
-            String kotlinCode = "";
-            try {
-                kotlinCode = generateKotlinCode(args[0]);
-            } catch (Exception e) {
-                out.println("EXCEPTION: " + e.getMessage());
+        if (args.length == 2) {
+            String inputMode = args[0];
+            if (inputMode.equals("-code")) {
+                String kotlinCode = "";
+                try {
+                    kotlinCode = generateKotlinCode(args[1]);
+                } catch (Exception e) {
+                    out.println("EXCEPTION: " + e.getMessage());
+                }
+                if (kotlinCode.isEmpty()) {
+                    out.println("EXCEPTION: generated code is empty.");
+                } else {
+                    out.println(kotlinCode);
+                }
+            } else if (inputMode.equals("-file")) {
+                convertFileToKotlin(new File(args[1]));
+            } else if (inputMode.equals("-directory")) {
+                File dir = new File(args[1]);
+                convertDirectory(dir);
+
+            } else {
+                out.println("EXCEPTION: First argument invalid (should be -code, -file or -directory)");
             }
-            if (kotlinCode.isEmpty()) {
-                out.println("EXCEPTION: generated code is empty.");
-            }
-            else {
-                out.println(kotlinCode);
-            }
-        }
-        else {
-            out.println("EXCEPTION: wrong number of arguments (should be 1).");
+
+        } else {
+            out.println("EXCEPTION: wrong number of arguments (should be 2).");
         }
     }
 
