@@ -253,7 +253,7 @@ public class JavaToKotlinTranslator {
     }
 
 
-    public static void main(@NotNull String[] args) throws IOException {
+    public static void main(@NotNull String[] args) {
         //noinspection UseOfSystemOutOrSystemErr
         final PrintStream out = System.out;
         if (args.length == 2) {
@@ -273,8 +273,7 @@ public class JavaToKotlinTranslator {
             } else if (inputMode.equals("-file")) {
                 convertFileToKotlin(new File(args[1]));
             } else if (inputMode.equals("-directory")) {
-                File dir = new File(args[1]);
-                convertDirectory(dir);
+                convertDirectory(new File(args[1]));
 
             } else {
                 out.println("EXCEPTION: First argument invalid (should be -code, -file or -directory)");
