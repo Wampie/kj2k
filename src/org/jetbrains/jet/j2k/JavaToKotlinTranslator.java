@@ -19,6 +19,7 @@ import com.intellij.core.JavaCoreApplicationEnvironment;
 import com.intellij.core.JavaCoreProjectEnvironment;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
@@ -206,25 +207,65 @@ public class JavaToKotlinTranslator {
         return "";
     }
 
+    @NotNull
+    static String writeKotlinString(@NotNull String javaString) {
+        String kotlinCode = "";
+        try {
+            kotlinCode = generateKotlinCode(javaString);
+        } catch (Exception e) {
+            System.out.println("EXCEPTION: " + e.getMessage());
+        }
+        if (kotlinCode.isEmpty()) {
+            throw new RuntimeException("Generated code is empty");
+        }
+        else {
+            return kotlinCode;
+        }
+    }
+
+    @NotNull
+    static void writeKotlinFile(@NotNull File javaFile) throws IOException {
+        String javaCode = FileUtil.loadFile(javaFile);
+        String kotlinCode = writeKotlinString(javaCode);
+        File kotlinFile = new File(javaFile.getAbsolutePath().replace(".java", ".kt"));
+        FileUtil.writeToFile(kotlinFile, kotlinCode);
+    }
+
+    @NotNull
+    static void writeKotlinDirectory(@NotNull File javaDirectory) throws IOException {
+        if (!javaDirectory.isDirectory()) {
+            throw new RuntimeException("Given File is not a Directory");
+        }
+        File[] javaFiles = javaDirectory.listFiles();
+        for (File f : javaFiles) {
+            if (f.isDirectory()) {
+                writeKotlinDirectory(f);
+            }
+            else {
+                writeKotlinFile(f);
+            }
+        }
+    }
+
     public static void main(@NotNull String[] args) throws IOException {
         //noinspection UseOfSystemOutOrSystemErr
         final PrintStream out = System.out;
-        if (args.length == 1) {
-            String kotlinCode = "";
-            try {
-                kotlinCode = generateKotlinCode(args[0]);
-            } catch (Exception e) {
-                out.println("EXCEPTION: " + e.getMessage());
+        if (args.length == 2) {
+            if (args[0].equals("-code")) {
+                out.println(writeKotlinString(args[1]));
             }
-            if (kotlinCode.isEmpty()) {
-                out.println("EXCEPTION: generated code is empty.");
+            else if (args[0].equals("-file")) {
+                writeKotlinFile(new File(args[1]));
+            }
+            else if (args[0].equals("-directory")) {
+                writeKotlinDirectory(new File(args[1]));
             }
             else {
-                out.println(kotlinCode);
+                throw new RuntimeException("First argument should be -code, -file or -directory");
             }
         }
         else {
-            out.println("EXCEPTION: wrong number of arguments (should be 1).");
+            throw new RuntimeException("Wrong number of arguments");
         }
     }
 
